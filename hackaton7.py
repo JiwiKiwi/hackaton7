@@ -117,10 +117,19 @@ confidence = st.slider(
     value=47,
 )
 
-uploaded_file = st.file_uploader(
-    "Upload a photo",
-    type=["jpg", "jpeg", "png", "webp"],
+photo_source = st.radio(
+    "Choose photo source",
+    ["Upload photo", "Camera"],
+    horizontal=True,
 )
+
+if photo_source == "Upload photo":
+    uploaded_file = st.file_uploader(
+        "Upload a photo",
+        type=["jpg", "jpeg", "png", "webp"],
+    )
+else:
+    uploaded_file = st.camera_input("Take a photo")
 
 if uploaded_file is None:
     st.stop()
