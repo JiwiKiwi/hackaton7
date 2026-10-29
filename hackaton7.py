@@ -1,6 +1,7 @@
 import io
 import threading
 from pathlib import Path
+import requests
 
 import streamlit as st
 from PIL import Image, ImageDraw, ImageOps
@@ -37,11 +38,77 @@ def load_model(weights_path, modified_time):
 
 # Check whether the model file exists.
 if not WEIGHTS.is_file():
-    st.error(
-        "Put weights.pt in the same folder as app.py, "
-        "then refresh this page."
-    )
-    st.stop()
+    try:
+        with st.spinner("Downloading model weights..."):
+            headers = {
+                "Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}",
+                "Accept": "application/vnd.github+json",
+            }
+
+            release_url = (
+                "https://api.github.com/repos/"
+                "JiwiKiwi/AI-For-Good-JalieVermeegen/"
+                "releases/tags/hackaton"
+            )
+
+            response = requests.get(
+                release_url,
+                headers=headers,
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            asset = next(
+                (
+                    item
+                    for item in response.json()["assets"]
+                    if item["name"] == "weights.pt"
+                ),
+                None,
+            )
+
+            if asset is None:
+                raise RuntimeError(
+                    "weights.pt was not found in the GitHub release."
+                )
+
+            download_headers = {
+                **headers,
+                "Accept": "application/octet-stream",
+            }
+
+            temporary_file = WEIGHTS.with_suffix(".pt.part")
+
+            try:
+                with requests.get(
+                    asset["url"],
+                    headers=download_headers,
+                    stream=True,
+                    timeout=(30, 300),
+                ) as download:
+                    download.raise_for_status()
+
+                    with temporary_file.open("wb") as output:
+                        for chunk in download.iter_content(
+                            chunk_size=1024 * 1024
+                        ):
+                            if chunk:
+                                output.write(chunk)
+
+                if temporary_file.stat().st_size != asset["size"]:
+                    raise RuntimeError("The download was incomplete.")
+
+                temporary_file.replace(WEIGHTS)
+
+            finally:
+                temporary_file.unlink(missing_ok=True)
+
+    except Exception:
+        st.error(
+            "Could not download the model. Check the GitHub token, "
+            "repository access, release tag and weights filename."
+        )
+        st.stop()
 
 confidence = st.slider(
     "Minimum confidence (%)",
